@@ -1,60 +1,156 @@
 import cv2
 import mediapipe as mp
+import random
+import time
+import tkinter as tk
+from tkinter import messagebox
 
 # Initialize MediaPipe hands model
 mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(static_image_mode=False, max_num_hands=1, min_detection_confidence=0.7)
 mp_drawing = mp.solutions.drawing_utils
 
+# Initialize game options and scores
+options = ["rock", "paper", "scissors"]
+user_score = 0
+computer_score = 0
+rounds = 0
+round_count = 0
+game_mode = ""
+
+# Function to classify gesture based on landmarks
 def classify_gesture(landmarks):
-    # Using landmarks to classify gestures:
     thumb_tip = landmarks[4]
     index_tip = landmarks[8]
     middle_tip = landmarks[12]
     ring_tip = landmarks[16]
     pinky_tip = landmarks[20]
     
-    # Determine gesture based on finger positions
     if (index_tip.y < landmarks[6].y and middle_tip.y < landmarks[10].y and
         ring_tip.y < landmarks[14].y and pinky_tip.y < landmarks[18].y):
-        return "paper"  # All fingers open
+        return "paper"
     elif (index_tip.y < landmarks[6].y and middle_tip.y > landmarks[10].y and
           ring_tip.y > landmarks[14].y and pinky_tip.y > landmarks[18].y):
-        return "scissors"  # Only index and middle fingers open
+        return "scissors"
     else:
-        return "rock"  # All fingers closed
+        return "rock"
 
-# Start capturing video
-cap = cv2.VideoCapture(0)
+# Countdown before capturing gesture
+def display_countdown(frame, countdown_time):
+    cv2.putText(frame, f"Get Ready! {countdown_time}", (150, 150), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 0, 255), 3)
+    cv2.imshow("Rock Paper Scissors", frame)
+    cv2.waitKey(1000)  # Wait 1 second for each countdown step
 
-while cap.isOpened():
-    ret, frame = cap.read()
-    if not ret:
-        break
+# Function to start the game
+def start_game():
+    global user_score, computer_score, round_count, game_mode, rounds
     
-    # Convert frame color to RGB
-    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    results = hands.process(rgb_frame)
+    # Reset scores and round count
+    user_score = 0
+    computer_score = 0
+    round_count = 0
+
+    try:
+        rounds = int(round_entry.get())
+        if rounds <= 0:
+            raise ValueError
+    except ValueError:
+        messagebox.showerror("Invalid Input", "Please enter a valid number of rounds.")
+        return
+
+    # Determine game mode
+    game_mode = mode_var.get()
+    cap = cv2.VideoCapture(0)
     
-    if results.multi_hand_landmarks:
-        for hand_landmarks in results.multi_hand_landmarks:
-            mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
-            
-            # Classify gesture based on landmarks
-            landmarks = hand_landmarks.landmark
-            gesture = classify_gesture(landmarks)
-            
-            # Display the gesture
-            cv2.putText(frame, f"Gesture: {gesture}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
+    # Main game loop for the specified rounds
+    while round_count < rounds:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        # Countdown before capturing gestures
+        for i in range(5, 0, -1):
+            display_countdown(frame, i)
+            ret, frame = cap.read()
+            if not ret:
+                break
 
-    # Show the video with gesture label
-    cv2.imshow("Rock Paper Scissors Gesture Recognition", frame)
+        # Convert frame to RGB
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results = hands.process(rgb_frame)
+        
+        user_gesture = None
+        computer_gesture = random.choice(options) if game_mode == "User vs Computer" else None
+        result_text = ""
 
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+        # Detect user's hand gesture
+        if results.multi_hand_landmarks:
+            for hand_landmarks in results.multi_hand_landmarks:
+                mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+                landmarks = hand_landmarks.landmark
+                user_gesture = classify_gesture(landmarks)
+                
+        # Determine result of the round
+        if game_mode == "User vs Computer" and user_gesture:
+            if (user_gesture == "rock" and computer_gesture == "scissors") or \
+               (user_gesture == "paper" and computer_gesture == "rock") or \
+               (user_gesture == "scissors" and computer_gesture == "paper"):
+                user_score += 1
+                result_text = "You Win!"
+            elif user_gesture == computer_gesture:
+                result_text = "It's a Tie!"
+            else:
+                computer_score += 1
+                result_text = "Computer Wins!"
+        elif game_mode == "User vs Human":
+            # Add any additional logic for User vs Human if needed
+            pass
 
-# Release resources
-cap.release()
-cv2.destroyAllWindows()
-hands.close()
+        # Display results on the frame
+        cv2.putText(frame, f"Round {round_count + 1}", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2)
+        if user_gesture:
+            cv2.putText(frame, f"Your gesture: {user_gesture}", (10, 450), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
+        if computer_gesture:
+            cv2.putText(frame, f"Computer gesture: {computer_gesture}", (300, 450), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+        if result_text:
+            cv2.putText(frame, result_text, (200, 200), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 255, 0), 3)
+        
+        cv2.imshow("Rock Paper Scissors", frame)
+        cv2.waitKey(3000)  # Wait 3 seconds to show the round result
+        round_count += 1
+    
+    # Display final winner
+    if user_score > computer_score:
+        final_result = "You are the Champion!"
+    elif user_score < computer_score:
+        final_result = "Computer is the Champion!"
+    else:
+        final_result = "It's a Draw!"
+    
+    # Show final result in a message box
+    messagebox.showinfo("Game Over", f"Final Score:\nYou: {user_score} - Computer: {computer_score}\n{final_result}")
+    cap.release()
+    cv2.destroyAllWindows()
+    hands.close()
 
+# Setup Tkinter GUI
+root = tk.Tk()
+root.title("Rock Paper Scissors Game")
+root.geometry("300x250")
+
+# Game mode selection
+mode_var = tk.StringVar(value="User vs Computer")
+tk.Label(root, text="Select Game Mode:").pack(pady=5)
+tk.Radiobutton(root, text="User vs Computer", variable=mode_var, value="User vs Computer").pack()
+tk.Radiobutton(root, text="User vs Human", variable=mode_var, value="User vs Human").pack()
+
+# Rounds input
+tk.Label(root, text="Enter Number of Rounds:").pack(pady=5)
+round_entry = tk.Entry(root)
+round_entry.pack(pady=5)
+
+# Start button
+start_button = tk.Button(root, text="Start Game", command=start_game)
+start_button.pack(pady=20)
+
+root.mainloop()
