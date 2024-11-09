@@ -3,183 +3,397 @@ import mediapipe as mp
 import random
 import time
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import ttk, messagebox
+import threading
 
 # Initialize MediaPipe hands model
 mp_hands = mp.solutions.hands
 mp_drawing = mp.solutions.drawing_utils
 
-# Initialize game options and scores
-options = ["rock", "paper", "scissors"]
-user1_score = 0
-user2_score = 0
-computer_score = 0
-rounds = 0
-round_count = 0
-game_mode = ""
+class RockPaperScissors:
+    def __init__(self):
+        self.options = ["rock", "paper", "scissors"]
+        self.user1_score = 0
+        self.user2_score = 0
+        self.computer_score = 0
+        self.rounds = 0
+        self.round_count = 0
+        self.game_mode = "User vs Computer"
+        self.user1_name = ""
+        self.user2_name = ""
+        self.setup_gui()
 
-# Function to classify gesture based on landmarks
-def classify_gesture(landmarks):
-    thumb_tip = landmarks[4]
-    index_tip = landmarks[8]
-    middle_tip = landmarks[12]
-    ring_tip = landmarks[16]
-    pinky_tip = landmarks[20]
-    
-    if (index_tip.y < landmarks[6].y and middle_tip.y < landmarks[10].y and
-        ring_tip.y < landmarks[14].y and pinky_tip.y < landmarks[18].y):
-        return "paper"
-    elif (index_tip.y < landmarks[6].y and middle_tip.y > landmarks[10].y and
-          ring_tip.y > landmarks[14].y and pinky_tip.y > landmarks[18].y):
-        return "scissors"
-    else:
-        return "rock"
-
-# Countdown before capturing gesture
-def display_countdown(frame, countdown_time):
-    cv2.putText(frame, f"Get Ready! {countdown_time}", (150, 150), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 0, 255), 3)
-    cv2.imshow("Rock Paper Scissors", frame)
-    cv2.waitKey(1000)
-
-# Function to start the game
-def start_game():
-    global user1_score, user2_score, computer_score, round_count, game_mode, rounds
-    
-    user1_score = 0
-    user2_score = 0
-    computer_score = 0
-    round_count = 0
-
-    try:
-        rounds = int(round_entry.get())
-        if rounds <= 0:
-            raise ValueError
-    except ValueError:
-        messagebox.showerror("Invalid Input", "Please enter a valid number of rounds.")
-        return
-
-    game_mode = mode_var.get()
-    
-    # Initialize hands processing only here to prevent errors
-    hands = mp_hands.Hands(static_image_mode=False, max_num_hands=1, min_detection_confidence=0.5)
-    cap = cv2.VideoCapture(0)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-    
-    while round_count < rounds:
-        user_gesture = None
-        user2_gesture = None
-        computer_gesture = random.choice(options) if game_mode == "User vs Computer" else None
-        result_text = ""
-
-        for i in range(5, 0, -1):
-            ret, frame = cap.read()
-            if not ret:
-                break
-            display_countdown(frame, i)
+    def classify_gesture(self, landmarks):
+        thumb_tip = landmarks[4]
+        index_tip = landmarks[8]
+        middle_tip = landmarks[12]
+        ring_tip = landmarks[16]
+        pinky_tip = landmarks[20]
         
-        ret, frame = cap.read()
-        if not ret:
-            break
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = hands.process(rgb_frame)
+        if (index_tip.y < landmarks[6].y and middle_tip.y < landmarks[10].y and
+            ring_tip.y < landmarks[14].y and pinky_tip.y < landmarks[18].y):
+            return "paper"
+        elif (index_tip.y < landmarks[6].y and middle_tip.y > landmarks[10].y and
+              ring_tip.y > landmarks[14].y and pinky_tip.y > landmarks[18].y):
+            return "scissors"
+        else:
+            return "rock"
+
+    def display_countdown(self, frame, countdown_time):
+        # Add a semi-transparent overlay
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (0, 0), (frame.shape[1], frame.shape[0]), (0, 0, 0), -1)
+        frame = cv2.addWeighted(overlay, 0.3, frame, 0.7, 0)
         
-        if game_mode == "User vs Computer":
-            if results.multi_hand_landmarks:
-                for hand_landmarks in results.multi_hand_landmarks:
-                    mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
-                    landmarks = hand_landmarks.landmark
-                    user_gesture = classify_gesture(landmarks)
-                    
-            if user_gesture:
-                if (user_gesture == "rock" and computer_gesture == "scissors") or \
-                   (user_gesture == "paper" and computer_gesture == "rock") or \
-                   (user_gesture == "scissors" and computer_gesture == "paper"):
-                    user1_score += 1
-                    result_text = "You Win!"
-                elif user_gesture == computer_gesture:
-                    result_text = "It's a Tie!"
-                else:
-                    computer_score += 1
-                    result_text = "Computer Wins!"
-                    
-        elif game_mode == "User vs Human":
-            for i in range(5, 0, -1):
+        # Add countdown text with better styling
+        text_size = cv2.getTextSize(f"{countdown_time}", cv2.FONT_HERSHEY_DUPLEX, 4, 6)[0]
+        text_x = (frame.shape[1] - text_size[0]) // 2
+        text_y = (frame.shape[0] + text_size[1]) // 2
+        
+        # Add shadow effect
+        cv2.putText(frame, f"{countdown_time}", (text_x + 3, text_y + 3), 
+                    cv2.FONT_HERSHEY_DUPLEX, 4, (0, 0, 0), 6)
+        cv2.putText(frame, f"{countdown_time}", (text_x, text_y), 
+                    cv2.FONT_HERSHEY_DUPLEX, 4, (255, 255, 255), 6)
+        
+        cv2.imshow("Rock Paper Scissors", frame)
+        cv2.waitKey(1)
+
+    def start_game_thread(self):
+        game_thread = threading.Thread(target=self.start_game)
+        game_thread.start()
+
+    def start_game(self):
+        self.user1_score = 0
+        self.user2_score = 0
+        self.computer_score = 0
+        self.round_count = 0
+
+        try:
+            self.rounds = int(self.round_entry.get())
+            if self.rounds <= 0:
+                raise ValueError
+        except ValueError:
+            messagebox.showerror("Invalid Input", "Please enter a valid number of rounds.")
+            return
+
+        # Get player names with default values
+        self.user1_name = self.user1_name_entry.get().strip() or "Player 1"
+        if self.game_mode == "User vs Human":
+            self.user2_name = self.user2_name_entry.get().strip() or "Player 2"
+
+            # Show position instructions for 2-player mode
+            messagebox.showinfo("Player Positions", 
+                              f"{self.user1_name}: Please stand on the LEFT side of the camera\n"
+                              f"{self.user2_name}: Please stand on the RIGHT side of the camera")
+
+        # Initialize video capture with optimization
+        cap = cv2.VideoCapture(0)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+        cap.set(cv2.CAP_PROP_FPS, 30)
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+
+        # Initialize hands with optimized parameters
+        hands = mp_hands.Hands(
+            static_image_mode=False,
+            max_num_hands=2 if self.game_mode == "User vs Human" else 1,
+            min_detection_confidence=0.7,
+            min_tracking_confidence=0.5
+        )
+
+        while self.round_count < self.rounds:
+            user_gesture = None
+            user2_gesture = None
+            computer_gesture = random.choice(self.options) if self.game_mode == "User vs Computer" else None
+
+            # Countdown phase
+            for i in range(3, 0, -1):
                 ret, frame = cap.read()
                 if not ret:
                     break
-                display_countdown(frame, i)
-            
+                frame = cv2.flip(frame, 1)  # Mirror the frame
+                
+                # Add divider and labels during countdown too
+                if self.game_mode == "User vs Human":
+                    frame_height, frame_width = frame.shape[:2]
+                    cv2.line(frame, 
+                            (frame_width // 2, 0), 
+                            (frame_width // 2, frame_height), 
+                            (255, 255, 255), 2)
+                    
+                    # Add player labels
+                    cv2.rectangle(frame, (0, 0), (frame_width // 2, 40), (0, 0, 0), -1)
+                    cv2.rectangle(frame, (frame_width // 2, 0), (frame_width, 40), (0, 0, 0), -1)
+                    cv2.putText(frame, f"{self.user1_name}'s Side", (20, 30), 
+                              cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+                    cv2.putText(frame, f"{self.user2_name}'s Side", (frame_width // 2 + 20, 30), 
+                              cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+                
+                self.display_countdown(frame, i)
+                time.sleep(0.7)
+
+            # Capture and process gesture
             ret, frame = cap.read()
             if not ret:
                 break
+            frame = cv2.flip(frame, 1)
+            
+            # Process frame with MediaPipe
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             results = hands.process(rgb_frame)
-            
+
             if results.multi_hand_landmarks:
-                for hand_landmarks in results.multi_hand_landmarks:
+                if self.game_mode == "User vs Computer":
+                    hand_landmarks = results.multi_hand_landmarks[0]
                     mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
-                    landmarks = hand_landmarks.landmark
-                    if user_gesture is None:
-                        user_gesture = classify_gesture(landmarks)
-                    else:
-                        user2_gesture = classify_gesture(landmarks)
+                    user_gesture = self.classify_gesture(hand_landmarks.landmark)
+                else:  # User vs Human mode
+                    if len(results.multi_hand_landmarks) >= 2:
+                        # Process both hands
+                        for idx, hand_landmarks in enumerate(results.multi_hand_landmarks[:2]):
+                            mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+                            if idx == 0:
+                                user_gesture = self.classify_gesture(hand_landmarks.landmark)
+                            else:
+                                user2_gesture = self.classify_gesture(hand_landmarks.landmark)
+
+            # Determine round result
+            result_text = self.determine_winner(user_gesture, user2_gesture, computer_gesture)
             
-            if user_gesture and user2_gesture:
-                if (user_gesture == "rock" and user2_gesture == "scissors") or \
-                   (user_gesture == "paper" and user2_gesture == "rock") or \
-                   (user_gesture == "scissors" and user2_gesture == "paper"):
-                    user1_score += 1
-                    result_text = "User 1 Wins!"
-                elif user_gesture == user2_gesture:
-                    result_text = "It's a Tie!"
-                else:
-                    user2_score += 1
-                    result_text = "User 2 Wins!"
+            # Display game information
+            self.display_game_info(frame, user_gesture, user2_gesture, computer_gesture, result_text)
+            
+            cv2.imshow("Rock Paper Scissors", frame)
+            cv2.waitKey(2000)
+            self.round_count += 1
 
-        cv2.putText(frame, f"Round {round_count + 1}", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2)
-        if user_gesture:
-            cv2.putText(frame, f"User 1 gesture: {user_gesture}", (10, 450), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
-        if computer_gesture:
-            cv2.putText(frame, f"Computer gesture: {computer_gesture}", (300, 450), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-        if user2_gesture:
-            cv2.putText(frame, f"User 2 gesture: {user2_gesture}", (300, 450), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-        if result_text:
-            cv2.putText(frame, result_text, (200, 200), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 255, 0), 3)
+        # Display final results
+        self.show_final_results()
         
-        cv2.imshow("Rock Paper Scissors", frame)
-        cv2.waitKey(3000)
-        round_count += 1
+        # Cleanup
+        cap.release()
+        cv2.destroyAllWindows()
+        hands.close()
 
-    if user1_score > max(user2_score, computer_score):
-        final_result = "User 1 is the Champion!"
-    elif user2_score > max(user1_score, computer_score):
-        final_result = "User 2 is the Champion!"
-    else:
-        final_result = "Computer is the Champion!" if game_mode == "User vs Computer" else "It's a Draw!"
-    
-    messagebox.showinfo("Game Over", f"Final Score:\nUser 1: {user1_score}\n" +
-                                    (f"User 2: {user2_score}" if game_mode == "User vs Human" else f"Computer: {computer_score}") +
-                                    f"\n{final_result}")
-    cap.release()
-    cv2.destroyAllWindows()
-    hands.close()  # Only close hands after the game loop completes
+    def determine_winner(self, user_gesture, user2_gesture, computer_gesture):
+        if self.game_mode == "User vs Computer":
+            if not user_gesture or not computer_gesture:
+                return "No gesture detected!"
+            
+            if (user_gesture == "rock" and computer_gesture == "scissors") or \
+               (user_gesture == "paper" and computer_gesture == "rock") or \
+               (user_gesture == "scissors" and computer_gesture == "paper"):
+                self.user1_score += 1
+                return f"{self.user1_name} Wins!"
+            elif user_gesture == computer_gesture:
+                return "It's a Tie!"
+            else:
+                self.computer_score += 1
+                return "Computer Wins!"
+        else:  # User vs Human
+            if not user_gesture or not user2_gesture:
+                return "Waiting for both players..."
+            
+            if (user_gesture == "rock" and user2_gesture == "scissors") or \
+               (user_gesture == "paper" and user2_gesture == "rock") or \
+               (user_gesture == "scissors" and user2_gesture == "paper"):
+                self.user1_score += 1
+                return f"{self.user1_name} Wins!"
+            elif user_gesture == user2_gesture:
+                return "It's a Tie!"
+            else:
+                self.user2_score += 1
+                return f"{self.user2_name} Wins!"
 
-# Setup Tkinter GUI
-root = tk.Tk()
-root.title("Rock Paper Scissors Game")
-root.geometry("300x250")
+    def display_game_info(self, frame, user_gesture, user2_gesture, computer_gesture, result_text):
+        frame_height, frame_width = frame.shape[:2]
+        
+        if self.game_mode == "User vs Human":
+            # Draw vertical divider line
+            cv2.line(frame, 
+                    (frame_width // 2, 0), 
+                    (frame_width // 2, frame_height), 
+                    (255, 255, 255), 2)
 
-mode_var = tk.StringVar(value="User vs Computer")
-tk.Label(root, text="Select Game Mode:").pack(pady=5)
-tk.Radiobutton(root, text="User vs Computer", variable=mode_var, value="User vs Computer").pack()
-tk.Radiobutton(root, text="User vs Human", variable=mode_var, value="User vs Human").pack()
+            # Add player labels at the top of each side
+            # Player 1 side
+            cv2.rectangle(frame, (0, 0), (frame_width // 2, 40), (0, 0, 0), -1)
+            cv2.putText(frame, f"{self.user1_name}'s Side", 
+                       (20, 30), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 
+                       0.8, (255, 255, 255), 2)
 
-tk.Label(root, text="Enter Number of Rounds:").pack(pady=5)
-round_entry = tk.Entry(root)
-round_entry.pack(pady=5)
+            # Player 2 side
+            cv2.rectangle(frame, (frame_width // 2, 0), (frame_width, 40), (0, 0, 0), -1)
+            cv2.putText(frame, f"{self.user2_name}'s Side", 
+                       (frame_width // 2 + 20, 30), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 
+                       0.8, (255, 255, 255), 2)
 
-start_button = tk.Button(root, text="Start Game", command=start_game)
-start_button.pack(pady=20)
+        # Add semi-transparent overlay for text background
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (0, frame_height - 80), (frame_width, frame_height), (0, 0, 0), -1)
+        frame = cv2.addWeighted(overlay, 0.3, frame, 0.7, 0)
 
-root.mainloop()
+        # Display round information
+        cv2.putText(frame, f"Round {self.round_count + 1}/{self.rounds}", 
+                    (20, frame_height - 50), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+
+        # Display gestures
+        if self.game_mode == "User vs Computer":
+            if user_gesture:
+                cv2.putText(frame, f"{self.user1_name}: {user_gesture}", 
+                            (20, frame_height - 20), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+            if computer_gesture:
+                cv2.putText(frame, f"Computer: {computer_gesture}", 
+                            (frame_width - 300, frame_height - 20), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+        else:
+            if user_gesture:
+                cv2.putText(frame, f"{self.user1_name}: {user_gesture}", 
+                            (20, frame_height - 20), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+            if user2_gesture:
+                cv2.putText(frame, f"{self.user2_name}: {user2_gesture}", 
+                            (frame_width - 300, frame_height - 20), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+
+        # Display result text in the center
+        if result_text:
+            text_size = cv2.getTextSize(result_text, cv2.FONT_HERSHEY_DUPLEX, 2, 3)[0]
+            text_x = (frame_width - text_size[0]) // 2
+            text_y = frame_height // 2
+
+            # Add background rectangle for result text
+            cv2.rectangle(frame, 
+                         (text_x - 10, text_y - text_size[1] - 10),
+                         (text_x + text_size[0] + 10, text_y + 10),
+                         (0, 0, 0), -1)
+            cv2.putText(frame, result_text, 
+                       (text_x, text_y), 
+                       cv2.FONT_HERSHEY_DUPLEX, 2, (0, 255, 0), 3)
+
+    def show_final_results(self):
+        if self.game_mode == "User vs Computer":
+            winner = self.user1_name if self.user1_score > self.computer_score else "Computer" if self.computer_score > self.user1_score else "It's a Draw"
+            messagebox.showinfo("Game Over", 
+                              f"Final Score:\n{self.user1_name}: {self.user1_score}\n"
+                              f"Computer: {self.computer_score}\n\n"
+                              f"Winner: {winner}!")
+        else:
+            winner = self.user1_name if self.user1_score > self.user2_score else self.user2_name if self.user2_score > self.user1_score else "It's a Draw"
+            messagebox.showinfo("Game Over", 
+                              f"Final Score:\n{self.user1_name}: {self.user1_score}\n"
+                              f"{self.user2_name}: {self.user2_score}\n\n"
+                              f"Winner: {winner}!")
+
+    def update_game_mode(self):
+        self.game_mode = self.mode_var.get()
+        if self.game_mode == "User vs Human":
+            self.user2_frame.pack(after=self.user1_frame, padx=20, pady=5, fill="x")
+        else:
+            self.user2_frame.pack_forget()
+
+    def setup_gui(self):
+        # Configure the main window
+        self.root = tk.Tk()
+        self.root.title("Rock Paper Scissors Game")
+        self.root.geometry("400x600")
+        self.root.configure(bg='#f0f0f0')
+
+        # Create main container with padding
+        main_frame = ttk.Frame(self.root, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Title
+        title_label = ttk.Label(main_frame, 
+                               text="Rock Paper Scissors", 
+                               font=('Helvetica', 24, 'bold'))
+        title_label.pack(pady=20)
+
+        # Game mode frame
+        mode_frame = ttk.LabelFrame(main_frame, text="Game Mode", padding="10")
+        mode_frame.pack(padx=20, pady=10, fill="x")
+
+        self.mode_var = tk.StringVar(value="User vs Computer")
+        
+        # Radio buttons for game mode
+        ttk.Radiobutton(mode_frame, 
+                       text="User vs Computer",
+                       variable=self.mode_var,
+                       value="User vs Computer",
+                       command=self.update_game_mode).pack(pady=5)
+        
+        ttk.Radiobutton(mode_frame, 
+                       text="User vs Human",
+                       variable=self.mode_var,
+                       value="User vs Human",
+                       command=self.update_game_mode).pack(pady=5)
+
+        # Player 1 frame
+        self.user1_frame = ttk.LabelFrame(main_frame, text="Player 1", padding="10")
+        self.user1_frame.pack(padx=20, pady=5, fill="x")
+        
+        ttk.Label(self.user1_frame, text="Name:").pack()
+        self.user1_name_entry = ttk.Entry(self.user1_frame)
+        self.user1_name_entry.pack(pady=5, fill="x")
+
+        # Player 2 frame (initially hidden)
+        self.user2_frame = ttk.LabelFrame(main_frame, text="Player 2", padding="10")
+        ttk.Label(self.user2_frame, text="Name:").pack()
+        self.user2_name_entry = ttk.Entry(self.user2_frame)
+        self.user2_name_entry.pack(pady=5, fill="x")
+
+        # Rounds frame
+        rounds_frame = ttk.LabelFrame(main_frame, text="Game Settings", padding="10")
+        rounds_frame.pack(padx=20, pady=10, fill="x")
+        
+        ttk.Label(rounds_frame, text="Number of Rounds:").pack()
+        self.round_entry = ttk.Entry(rounds_frame)
+        self.round_entry.pack(pady=5, fill="x")
+        self.round_entry.insert(0, "3")
+
+        # Start button with styling
+        style = ttk.Style()
+        style.configure("Start.TButton", 
+                       font=('Helvetica', 12, 'bold'),
+                       padding=10)
+        
+        self.start_button = ttk.Button(main_frame, 
+                                     text="Start Game",
+                                     style="Start.TButton",
+                                     command=self.start_game_thread)
+        self.start_button.pack(pady=20)
+
+        # Instructions
+        instructions_frame = ttk.LabelFrame(main_frame, text="How to Play", padding="10")
+        instructions_frame.pack(padx=20, pady=10, fill="x")
+        
+        instructions = (
+            "1. Select your game mode\n"
+            "2. Enter player name(s)\n"
+            "3. Set number of rounds\n"
+            "4. Wait for countdown and show your gesture\n"
+            "5. Keep your hand steady for better detection\n"
+            "6. In 2-player mode, both players show gestures simultaneously"
+        )
+        
+        instructions_label = ttk.Label(instructions_frame, 
+                                     text=instructions,
+                                     wraplength=300,
+                                     justify="left")
+        instructions_label.pack(pady=5)
+
+        # Version info
+        version_label = ttk.Label(main_frame, 
+                                text="v1.0",
+                                font=('Helvetica', 8))
+        version_label.pack(pady=5)
+
+        self.root.mainloop()
+
+if __name__ == "__main__":
+    game = RockPaperScissors()
