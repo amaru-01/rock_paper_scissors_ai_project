@@ -22,7 +22,7 @@ class RockPaperScissors:
         self.user1_name = ""
         self.user2_name = ""
         self.setup_gui()
-
+    
     def classify_gesture(self, landmarks):
         thumb_tip = landmarks[4]
         index_tip = landmarks[8]
@@ -38,6 +38,8 @@ class RockPaperScissors:
             return "scissors"
         else:
             return "rock"
+
+   
 
     def display_countdown(self, frame, countdown_time):
         # Add a semi-transparent overlay
@@ -60,8 +62,100 @@ class RockPaperScissors:
         cv2.waitKey(1)
 
     def start_game_thread(self):
+        # Disable the start button
+        self.start_button.configure(state='disabled')
+        
+        # Create and show progress bar window
+        self.progress_window = tk.Toplevel(self.root)
+        self.progress_window.title("Loading")
+        self.progress_window.geometry("300x150")
+        self.progress_window.transient(self.root)
+        
+        # Center the progress window
+        window_width = 300
+        window_height = 150
+        screen_width = self.progress_window.winfo_screenwidth()
+        screen_height = self.progress_window.winfo_screenheight()
+        x = (screen_width - window_width) // 2
+        y = (screen_height - window_height) // 2
+        self.progress_window.geometry(f"{window_width}x{window_height}+{x}+{y}")
+        
+        # Add loading label
+        loading_label = ttk.Label(self.progress_window, 
+                                text="Initializing game...",
+                                font=('Helvetica', 10))
+        loading_label.pack(pady=20)
+        
+        # Add progress bar
+        self.progress_bar = ttk.Progressbar(self.progress_window, 
+                                          length=200, 
+                                          mode='determinate')
+        self.progress_bar.pack(pady=10)
+        
+        # Start the loading process
+        loading_thread = threading.Thread(target=self.load_game)
+        loading_thread.start()
+
+    def load_game(self):
+        # Simulate loading process
+        for i in range(101):
+            time.sleep(0.03)  # Simulate some work
+            self.progress_bar['value'] = i
+            if i == 25:
+                self.update_loading_text("Initializing camera...")
+            elif i == 50:
+                self.update_loading_text("Loading AI models...")
+            elif i == 75:
+                self.update_loading_text("Preparing game environment...")
+            
+            self.progress_window.update()
+        
+        # Close progress window and start game
+        self.progress_window.destroy()
+        self.start_button.configure(state='normal')
+        
+        # Start the actual game
         game_thread = threading.Thread(target=self.start_game)
         game_thread.start()
+
+    def update_loading_text(self, text):
+        for widget in self.progress_window.winfo_children():
+            if isinstance(widget, ttk.Label):
+                widget.configure(text=text)
+                break
+
+    def display_gesture_text(self, frame, text, position='center'):
+        frame_height, frame_width = frame.shape[:2]
+        font = cv2.FONT_HERSHEY_DUPLEX
+        font_scale = 2
+        thickness = 3
+        text_size = cv2.getTextSize(text, font, font_scale, thickness)[0]
+
+        # Calculate position based on whether it's center or side
+        if position == 'center':
+            text_x = (frame_width - text_size[0]) // 2
+            text_y = (frame_height + text_size[1]) // 2
+        elif position == 'left':
+            text_x = 50
+            text_y = frame_height // 2
+        else:  # right
+            text_x = frame_width - text_size[0] - 50
+            text_y = frame_height // 2
+        
+        # Add background rectangle
+        padding = 20
+        cv2.rectangle(frame,
+                     (text_x - padding, text_y - text_size[1] - padding),
+                     (text_x + text_size[0] + padding, text_y + padding),
+                     (0, 0, 0), -1)
+        
+        # Add text with shadow effect
+        cv2.putText(frame, text,
+                   (text_x + 2, text_y + 2),
+                   font, font_scale, (0, 0, 0), thickness)
+        cv2.putText(frame, text,
+                   (text_x, text_y),
+                   font, font_scale, (255, 255, 255), thickness)
 
     def start_game(self):
         self.user1_score = 0
@@ -148,6 +242,10 @@ class RockPaperScissors:
                     hand_landmarks = results.multi_hand_landmarks[0]
                     mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
                     user_gesture = self.classify_gesture(hand_landmarks.landmark)
+                    # Display user gesture
+                    self.display_gesture_text(frame, f"You chose: {user_gesture.upper()}", 'left')
+                    # Display computer gesture
+                    self.display_gesture_text(frame, f"Computer chose: {computer_gesture.upper()}", 'right')
                 else:  # User vs Human mode
                     if len(results.multi_hand_landmarks) >= 2:
                         # Process both hands
@@ -155,8 +253,10 @@ class RockPaperScissors:
                             mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
                             if idx == 0:
                                 user_gesture = self.classify_gesture(hand_landmarks.landmark)
+                                self.display_gesture_text(frame, f"{self.user1_name}: {user_gesture.upper()}", 'left')
                             else:
                                 user2_gesture = self.classify_gesture(hand_landmarks.landmark)
+                                self.display_gesture_text(frame, f"{self.user2_name}: {user2_gesture.upper()}", 'right')
 
             # Determine round result
             result_text = self.determine_winner(user_gesture, user2_gesture, computer_gesture)
