@@ -363,7 +363,18 @@ class RockPaperScissors:
 
         # Display result text in the center
         if result_text:
-            text_size = cv2.getTextSize(result_text, cv2.FONT_HERSHEY_DUPLEX, 2, 3)[0]
+            
+            # Explicitly set different font scales based on game mode
+            if self.game_mode == "User vs Computer":
+                font_scale = 0.75  # Much smaller font for computer mode
+                font = cv2.FONT_HERSHEY_SIMPLEX  # Using a different, slightly smaller font
+                thickness = 2
+            else:
+                font_scale = 2
+                font = cv2.FONT_HERSHEY_DUPLEX
+                thickness = 3
+
+            text_size = cv2.getTextSize(result_text, font, font_scale, thickness)[0]
             text_x = (frame_width - text_size[0]) // 2
             text_y = frame_height // 2
 
@@ -374,7 +385,7 @@ class RockPaperScissors:
                          (0, 0, 0), -1)
             cv2.putText(frame, result_text, 
                        (text_x, text_y), 
-                       cv2.FONT_HERSHEY_DUPLEX, 2, (0, 255, 0), 3)
+                       cv2.FONT_HERSHEY_DUPLEX, 2, (0, 255, 0), thickness)
 
     def show_final_results(self):
         if self.game_mode == "User vs Computer":
