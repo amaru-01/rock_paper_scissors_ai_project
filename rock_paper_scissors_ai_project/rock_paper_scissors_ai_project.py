@@ -23,6 +23,7 @@ class RockPaperScissors:
         self.user2_name = ""
         self.setup_gui()
     
+        # Fingertips gestures classification
     def classify_gesture(self, landmarks):
         thumb_tip = landmarks[4]
         index_tip = landmarks[8]
